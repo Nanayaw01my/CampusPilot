@@ -20,7 +20,7 @@ class NotificationController extends Controller
     public function markRead(Request $request, string $id)
     {
         Notification::where('user_id', $request->user()->id)
-                    ->where('_id', $id)
+                    ->where('id', $id)
                     ->update(['read' => true]);
 
         return response()->json(['message' => 'Marked as read']);

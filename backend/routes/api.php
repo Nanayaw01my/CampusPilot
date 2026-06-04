@@ -23,6 +23,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Auth
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::get('/auth/me', [AuthController::class, 'me']);
+    Route::patch('/auth/profile', [AuthController::class, 'updateProfile']);
 
     // Library
     Route::get('/library', [LibraryController::class, 'index']);
@@ -30,6 +31,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/library', [LibraryController::class, 'store']);
     Route::post('/library/{id}/bookmark', [LibraryController::class, 'bookmark']);
     Route::patch('/library/{id}/progress', [LibraryController::class, 'updateProgress']);
+
+    // Audio
+    Route::get('/audio', [AudioController::class, 'index']);
+    Route::get('/audio/{id}', [AudioController::class, 'show']);
+    Route::post('/audio', [AudioController::class, 'store']);
+    Route::post('/audio/{id}/like', [AudioController::class, 'like']);
 
     // Past Questions
     Route::get('/past-questions', [PastQuestionController::class, 'index']);
@@ -58,10 +65,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Notifications
     Route::get('/notifications', [NotificationController::class, 'index']);
-    Route::patch('/notifications/{id}/read', [NotificationController::class, 'markRead']);
     Route::patch('/notifications/read-all', [NotificationController::class, 'markAllRead']);
+    Route::patch('/notifications/{id}/read', [NotificationController::class, 'markRead']);
 
-    // Admin (role-based)
+    // Admin
     Route::middleware('admin')->prefix('admin')->group(function () {
         Route::get('/stats', [AdminController::class, 'stats']);
         Route::get('/users', [AdminController::class, 'users']);

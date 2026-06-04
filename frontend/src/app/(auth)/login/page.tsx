@@ -1,33 +1,44 @@
 'use client'
 import { useState } from 'react'
 import Link from 'next/link'
-import { Eye, EyeOff, Mail, Lock, Compass, ArrowRight, Sparkles } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Eye, EyeOff, Mail, Lock, Compass, ArrowRight } from 'lucide-react'
 import Button from '@/components/ui/Button'
-import Input from '@/components/ui/Input'
+import { authApi, setAuth } from '@/lib/api'
 
 export default function LoginPage() {
+  const router = useRouter()
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [form, setForm] = useState({ email: '', password: '' })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    setTimeout(() => {
-      window.location.href = '/dashboard'
-    }, 1200)
+    setError('')
+    try {
+      const res = await authApi.login(form)
+      setAuth(res.data.token, res.data.user)
+      router.push('/dashboard')
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } }
+      const msg = axiosErr.response?.data?.errors?.email?.[0]
+        || axiosErr.response?.data?.message
+        || 'Login failed. Please check your credentials.'
+      setError(msg)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
     <div className="min-h-screen bg-mesh flex items-center justify-center p-4">
-      {/* Orbs */}
       <div className="fixed top-1/4 left-1/6 w-64 h-64 bg-indigo-600/20 rounded-full blur-3xl" />
       <div className="fixed bottom-1/4 right-1/6 w-80 h-80 bg-purple-600/15 rounded-full blur-3xl" />
 
       <div className="relative w-full max-w-md">
-        {/* Card */}
         <div className="bg-white/10 backdrop-blur-2xl border border-white/15 rounded-3xl p-8 shadow-2xl">
-          {/* Logo */}
           <div className="text-center mb-8">
             <Link href="/" className="inline-flex items-center gap-2.5 mb-6">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/40">
@@ -38,6 +49,12 @@ export default function LoginPage() {
             <h1 className="text-2xl font-black text-white mb-1">Welcome back!</h1>
             <p className="text-gray-400 text-sm">Sign in to your account to continue</p>
           </div>
+
+          {error && (
+            <div className="mb-4 p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-300 text-sm text-center">
+              {error}
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -97,11 +114,9 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Demo login */}
           <div className="mt-4 p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20">
-            <p className="text-xs text-indigo-300 text-center font-medium flex items-center justify-center gap-1">
-              <Sparkles size={12} />
-              Demo: Use any email and password to explore
+            <p className="text-xs text-indigo-300 text-center font-medium">
+              Demo: <strong>student@university.edu</strong> / <strong>password123</strong>
             </p>
           </div>
         </div>

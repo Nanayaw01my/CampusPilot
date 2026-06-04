@@ -83,4 +83,18 @@ class AuthController extends Controller
             ? response()->json(['message' => 'Reset link sent to your email'])
             : response()->json(['message' => 'Unable to send reset link'], 400);
     }
+
+    public function updateProfile(Request $request)
+    {
+        $request->validate([
+            'name' => 'sometimes|string|max:255',
+            'department' => 'sometimes|string',
+            'level' => 'sometimes|string',
+        ]);
+
+        $user = $request->user();
+        $user->update($request->only(['name', 'department', 'level']));
+
+        return response()->json($user);
+    }
 }

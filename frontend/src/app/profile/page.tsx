@@ -1,26 +1,61 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import AppLayout from '@/components/layout/AppLayout'
 import Avatar from '@/components/ui/Avatar'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
-import ProgressBar from '@/components/ui/ProgressBar'
-import { mockUser, mockStats, mockBooks } from '@/lib/mock-data'
+import { authApi, isAuthenticated } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
-import { User, Mail, BookOpen, Award, Settings, Camera, Edit, Star, Flame, Target, TrendingUp } from 'lucide-react'
+import { Mail, BookOpen, Award, Camera, Edit, Star, Flame, Target, TrendingUp } from 'lucide-react'
+import api from '@/lib/api'
+import toast from 'react-hot-toast'
 
 export default function ProfilePage() {
+  const router = useRouter()
   const [activeTab, setActiveTab] = useState<'overview' | 'activity' | 'settings'>('overview')
   const [editing, setEditing] = useState(false)
-  const [name, setName] = useState(mockUser.name)
+  const [user, setUser] = useState<Record<string, unknown> | null>(null)
+  const [name, setName] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
 
-  const readBooks = mockBooks.filter(b => b.progress > 0)
-  const completedBooks = mockBooks.filter(b => b.progress === 100)
+  useEffect(() => {
+    if (!isAuthenticated()) { router.push('/login'); return }
+    authApi.me().then(res => {
+      setUser(res.data)
+      setName(res.data.name || '')
+    }).finally(() => setLoading(false))
+  }, [router])
+
+  const handleSaveName = async () => {
+    setSaving(true)
+    try {
+      const res = await api.patch('/auth/profile', { name })
+      setUser(res.data)
+      setName(res.data.name)
+      setEditing(false)
+      toast.success('Profile updated!')
+    } catch { toast.error('Failed to update profile') }
+    finally { setSaving(false) }
+  }
+
+  if (loading || !user) return (
+    <AppLayout>
+      <div className="flex items-center justify-center h-64">
+        <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    </AppLayout>
+  )
+
+  const bookmarks = (user.bookmarks as string[]) || []
+  const savedQs = (user.saved_questions as string[]) || []
+  const readingProgress = (user.reading_progress as Record<string, number>) || {}
+  const booksInProgress = Object.keys(readingProgress).length
 
   return (
     <AppLayout>
       <div className="max-w-4xl mx-auto space-y-6">
-        {/* Profile Hero */}
         <div className="relative overflow-hidden bg-gradient-to-br from-indigo-600 via-purple-600 to-violet-700 rounded-2xl p-6 text-white shadow-xl">
           <div className="absolute inset-0 opacity-20">
             <div className="absolute -top-12 -right-12 w-48 h-48 bg-white rounded-full" />
@@ -37,9 +72,11 @@ export default function ProfilePage() {
               {editing ? (
                 <div className="flex items-center gap-2 mb-2">
                   <input value={name} onChange={e => setName(e.target.value)}
-                    className="text-xl font-black bg-white/20 border border-white/30 rounded-lg px-3 py-1 focus:outline-none focus:ring-2 focus:ring-white/50"
-                  />
-                  <button onClick={() => setEditing(false)} className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-semibold">Done</button>
+                    className="text-xl font-black bg-white/20 border border-white/30 rounded-lg px-3 py-1 focus:outline-none focus:ring-2 focus:ring-white/50" />
+                  <button onClick={handleSaveName} disabled={saving}
+                    className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-semibold disabled:opacity-60">
+                    {saving ? 'Saving...' : 'Done'}
+                  </button>
                 </div>
               ) : (
                 <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
@@ -50,30 +87,29 @@ export default function ProfilePage() {
                 </div>
               )}
               <p className="text-indigo-200 text-sm mb-3 flex items-center justify-center sm:justify-start gap-1.5">
-                <Mail size={12} /> {mockUser.email}
+                <Mail size={12} /> {user.email as string}
               </p>
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                <Badge variant="primary" size="md">{mockUser.department}</Badge>
-                <Badge variant="info" size="md">Level {mockUser.level}</Badge>
-                <Badge variant="success" size="md">Student</Badge>
+                <Badge variant="primary" size="md">{user.department as string || 'N/A'}</Badge>
+                <Badge variant="info" size="md">Level {user.level as string || 'N/A'}</Badge>
+                <Badge variant="success" size="md">{user.role as string || 'Student'}</Badge>
               </div>
             </div>
             <div className="text-center sm:text-right">
               <div className="flex items-center gap-1.5 text-amber-300 mb-1">
-                <Flame size={16} /> <span className="font-bold">{mockStats.readingStreak} day streak</span>
+                <Flame size={16} /> <span className="font-bold">{booksInProgress} in progress</span>
               </div>
-              <p className="text-xs text-indigo-200">Member since {formatDate(mockUser.joinedAt)}</p>
+              <p className="text-xs text-indigo-200">Member since {formatDate(user.created_at as string)}</p>
             </div>
           </div>
         </div>
 
-        {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: 'Books Read', value: mockStats.booksRead, icon: BookOpen, color: 'text-indigo-600' },
-            { label: 'Downloads', value: mockStats.questionsDownloaded, icon: TrendingUp, color: 'text-purple-600' },
-            { label: 'Events', value: mockStats.eventsAttended, icon: Award, color: 'text-emerald-600' },
-            { label: 'Reminders', value: mockStats.remindersSet, icon: Target, color: 'text-amber-600' },
+            { label: 'Bookmarked', value: bookmarks.length, icon: BookOpen, color: 'text-indigo-600' },
+            { label: 'Q-Papers', value: savedQs.length, icon: TrendingUp, color: 'text-purple-600' },
+            { label: 'Reading', value: booksInProgress, icon: Award, color: 'text-emerald-600' },
+            { label: 'Saved Opps', value: ((user.saved_opportunities as string[]) || []).length, icon: Target, color: 'text-amber-600' },
           ].map(({ label, value, icon: Icon, color }) => (
             <div key={label} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-4 text-center">
               <Icon size={20} className={`${color} mx-auto mb-2`} />
@@ -83,7 +119,6 @@ export default function ProfilePage() {
           ))}
         </div>
 
-        {/* Tabs */}
         <div className="flex gap-2 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl w-fit">
           {(['overview', 'activity', 'settings'] as const).map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)}
@@ -95,34 +130,23 @@ export default function ProfilePage() {
 
         {activeTab === 'overview' && (
           <div className="space-y-5">
-            {/* Currently reading */}
             <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-5">
-              <h3 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2"><BookOpen size={16} className="text-indigo-500" /> Currently Reading</h3>
-              <div className="space-y-4">
-                {readBooks.map(book => (
-                  <div key={book.id} className="flex items-center gap-4">
-                    <div className="w-10 h-14 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center flex-shrink-0">
-                      <BookOpen size={14} className="text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{book.title}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{book.author}</p>
-                      <ProgressBar value={book.progress} showPercent size="sm" className="mt-1.5" />
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <h3 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2"><BookOpen size={16} className="text-indigo-500" /> Reading Progress</h3>
+              {booksInProgress === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-4">No books in progress. Visit the library to start reading!</p>
+              ) : (
+                <p className="text-sm text-gray-600 dark:text-gray-300">{booksInProgress} book{booksInProgress > 1 ? 's' : ''} currently in progress</p>
+              )}
             </div>
 
-            {/* Achievements */}
             <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-5">
               <h3 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2"><Star size={16} className="text-amber-500" /> Achievements</h3>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
-                  { label: '7-Day Streak', icon: '🔥', earned: true, desc: 'Read 7 days in a row' },
-                  { label: 'Book Worm', icon: '📚', earned: true, desc: 'Read 10+ books' },
-                  { label: 'Explorer', icon: '🌍', earned: false, desc: 'Attend 10 events' },
-                  { label: 'Scholar', icon: '🎓', earned: false, desc: 'Download 50 resources' },
+                  { label: 'Member', icon: '🎓', earned: true, desc: 'Joined CampusPilot' },
+                  { label: 'Explorer', icon: '📚', earned: bookmarks.length > 0, desc: 'Bookmarked a book' },
+                  { label: 'Researcher', icon: '🔍', earned: savedQs.length > 0, desc: 'Saved a past question' },
+                  { label: 'Scholar', icon: '⭐', earned: booksInProgress > 0, desc: 'Started reading' },
                 ].map(a => (
                   <div key={a.label} className={`p-3 rounded-xl border text-center ${a.earned ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800' : 'bg-gray-50 dark:bg-gray-800 border-gray-100 dark:border-gray-700 opacity-50'}`}>
                     <div className="text-3xl mb-1">{a.icon}</div>
@@ -140,18 +164,18 @@ export default function ProfilePage() {
             <h3 className="font-bold text-gray-900 dark:text-white mb-2">Account Settings</h3>
             {[
               { label: 'Full Name', value: name, type: 'text' },
-              { label: 'Email Address', value: mockUser.email, type: 'email' },
-              { label: 'Department', value: mockUser.department, type: 'text' },
+              { label: 'Email Address', value: user.email as string, type: 'email' },
+              { label: 'Department', value: user.department as string, type: 'text' },
             ].map(({ label, value, type }) => (
               <div key={label}>
                 <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 block mb-1">{label}</label>
-                <input defaultValue={value} type={type}
-                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40" />
+                <input defaultValue={value} type={type} readOnly={label !== 'Full Name'}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 read-only:opacity-60" />
               </div>
             ))}
             <div className="pt-2 flex gap-3">
-              <Button variant="primary">Save Changes</Button>
-              <Button variant="secondary">Cancel</Button>
+              <Button variant="primary" loading={saving} onClick={handleSaveName}>Save Changes</Button>
+              <Button variant="secondary" onClick={() => setEditing(false)}>Cancel</Button>
             </div>
           </div>
         )}

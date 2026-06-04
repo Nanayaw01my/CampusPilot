@@ -1,11 +1,13 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import AppLayout from '@/components/layout/AppLayout'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
-import { mockReminders } from '@/lib/mock-data'
+import { remindersApi, isAuthenticated } from '@/lib/api'
 import { formatDate, formatTime, getDaysUntil } from '@/lib/utils'
 import { Bell, Plus, Check, Trash2, Clock, BookOpen, FileText, Calendar, Target, ChevronDown } from 'lucide-react'
+import toast from 'react-hot-toast'
 
 const typeIcons: Record<string, React.ElementType> = {
   assignment: FileText, exam: BookOpen, event: Calendar, study: Target, deadline: Clock,
@@ -17,18 +19,92 @@ const typeColors: Record<string, string> = {
 }
 const priorityVariants: Record<string, string> = { urgent: 'danger', high: 'warning', medium: 'primary', low: 'success' }
 
+interface Reminder {
+  id: string
+  title: string
+  type: string
+  due_date: string
+  priority: string
+  completed: boolean
+  notify_email?: boolean
+  notify_push?: boolean
+}
+
 export default function RemindersPage() {
-  const [reminders, setReminders] = useState(mockReminders)
+  const router = useRouter()
+  const [reminders, setReminders] = useState<Reminder[]>([])
+  const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [filter, setFilter] = useState<'all' | 'pending' | 'done'>('all')
-  const [form, setForm] = useState({ title: '', type: 'assignment', dueDate: '', priority: 'medium', notifyEmail: true, notifyPush: true })
+  const [form, setForm] = useState({ title: '', type: 'assignment', due_date: '', priority: 'medium', notify_email: true, notify_push: true })
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!isAuthenticated()) { router.push('/login'); return }
+    remindersApi.list()
+      .then(res => {
+        const data = (res.data as { data: Reminder[] }).data
+        setReminders(Array.isArray(data) ? data : [])
+      })
+      .catch(() => toast.error('Failed to load reminders'))
+      .finally(() => setLoading(false))
+  }, [router])
 
   const filtered = reminders.filter(r =>
     filter === 'all' ? true : filter === 'pending' ? !r.completed : r.completed
   )
 
-  const toggle = (id: string) => setReminders(r => r.map(x => x.id === id ? { ...x, completed: !x.completed } : x))
-  const remove = (id: string) => setReminders(r => r.filter(x => x.id !== id))
+  const toggle = async (id: string) => {
+    try {
+      await remindersApi.complete(id)
+      setReminders(r => r.map(x => x.id === id ? { ...x, completed: !x.completed } : x))
+      toast.success('Reminder updated')
+    } catch {
+      toast.error('Failed to update reminder')
+    }
+  }
+
+  const remove = async (id: string) => {
+    try {
+      await remindersApi.delete(id)
+      setReminders(r => r.filter(x => x.id !== id))
+      toast.success('Reminder deleted')
+    } catch {
+      toast.error('Failed to delete reminder')
+    }
+  }
+
+  const handleSave = async () => {
+    if (!form.title) return
+    setSaving(true)
+    try {
+      const res = await remindersApi.create({
+        title: form.title,
+        type: form.type,
+        due_date: form.due_date,
+        priority: form.priority,
+        notify_email: form.notify_email,
+        notify_push: form.notify_push,
+      })
+      const created = (res.data as { data: Reminder }).data
+      setReminders(prev => [...prev, created])
+      setForm({ title: '', type: 'assignment', due_date: '', priority: 'medium', notify_email: true, notify_push: true })
+      setShowAdd(false)
+      toast.success('Reminder created!')
+    } catch {
+      toast.error('Failed to create reminder')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return (
+    <AppLayout>
+      <div className="flex items-center justify-center h-64">
+        <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    </AppLayout>
+  )
 
   return (
     <AppLayout>
@@ -51,7 +127,7 @@ export default function RemindersPage() {
           {[
             { label: 'Pending', count: reminders.filter(r => !r.completed).length, color: 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 border-amber-200 dark:border-amber-800' },
             { label: 'Completed', count: reminders.filter(r => r.completed).length, color: 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 border-emerald-200 dark:border-emerald-800' },
-            { label: 'This Week', count: reminders.filter(r => getDaysUntil(r.dueDate) <= 7 && getDaysUntil(r.dueDate) >= 0).length, color: 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 border-indigo-200 dark:border-indigo-800' },
+            { label: 'This Week', count: reminders.filter(r => getDaysUntil(r.due_date) <= 7 && getDaysUntil(r.due_date) >= 0).length, color: 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 border-indigo-200 dark:border-indigo-800' },
           ].map(({ label, count, color }) => (
             <div key={label} className={`rounded-2xl border p-4 text-center ${color}`}>
               <p className="text-2xl font-black">{count}</p>
@@ -77,26 +153,22 @@ export default function RemindersPage() {
                   {['urgent', 'high', 'medium', 'low'].map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
                 </select>
               </div>
-              <input type="datetime-local" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })}
+              <input type="datetime-local" value={form.due_date} onChange={e => setForm({ ...form, due_date: e.target.value })}
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40" />
               <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={form.notifyEmail} onChange={e => setForm({ ...form, notifyEmail: e.target.checked })} className="w-4 h-4 accent-indigo-600" />
+                  <input type="checkbox" checked={form.notify_email} onChange={e => setForm({ ...form, notify_email: e.target.checked })} className="w-4 h-4 accent-indigo-600" />
                   Email notify
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={form.notifyPush} onChange={e => setForm({ ...form, notifyPush: e.target.checked })} className="w-4 h-4 accent-indigo-600" />
+                  <input type="checkbox" checked={form.notify_push} onChange={e => setForm({ ...form, notify_push: e.target.checked })} className="w-4 h-4 accent-indigo-600" />
                   Push notify
                 </label>
               </div>
               <div className="flex gap-3">
-                <Button variant="primary" className="flex-1" onClick={() => {
-                  if (form.title) {
-                    setReminders(prev => [...prev, { id: Date.now().toString(), ...form, completed: false }])
-                    setForm({ title: '', type: 'assignment', dueDate: '', priority: 'medium', notifyEmail: true, notifyPush: true })
-                    setShowAdd(false)
-                  }
-                }}>Save Reminder</Button>
+                <Button variant="primary" className="flex-1" onClick={handleSave} disabled={saving}>
+                  {saving ? 'Saving...' : 'Save Reminder'}
+                </Button>
                 <Button variant="secondary" onClick={() => setShowAdd(false)}>Cancel</Button>
               </div>
             </div>
@@ -117,7 +189,7 @@ export default function RemindersPage() {
         <div className="space-y-3">
           {filtered.map(r => {
             const Icon = typeIcons[r.type] || Bell
-            const days = getDaysUntil(r.dueDate)
+            const days = getDaysUntil(r.due_date)
             return (
               <div key={r.id} className={`bg-white dark:bg-gray-900 rounded-2xl border p-4 flex gap-4 items-start transition-all ${r.completed ? 'opacity-60 border-gray-100 dark:border-gray-800' : 'border-gray-100 dark:border-gray-800 shadow-sm'}`}>
                 <button onClick={() => toggle(r.id)}
@@ -131,7 +203,7 @@ export default function RemindersPage() {
                   <p className={`font-semibold text-sm ${r.completed ? 'line-through text-gray-400' : 'text-gray-900 dark:text-white'}`}>{r.title}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 flex items-center gap-1">
                     <Clock size={10} />
-                    {formatDate(r.dueDate)} · {formatTime(r.dueDate)}
+                    {formatDate(r.due_date)} · {formatTime(r.due_date)}
                     {!r.completed && days <= 3 && days >= 0 && (
                       <span className="text-red-500 font-semibold ml-1">({days === 0 ? 'Today!' : `${days}d left`})</span>
                     )}

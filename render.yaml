@@ -1,11 +1,46 @@
 services:
+  # ── Backend API (Laravel) ──────────────────────────────────────────────────
+  - type: web
+    name: campuspilot-api
+    env: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: false
+      - key: APP_KEY
+        generateValue: true
+      - key: APP_URL
+        value: https://campuspilot-api.onrender.com
+      - key: DB_CONNECTION
+        value: sqlite
+      - key: DB_DATABASE
+        value: /var/www/html/database/database.sqlite
+      - key: SESSION_DRIVER
+        value: file
+      - key: CACHE_STORE
+        value: file
+      - key: QUEUE_CONNECTION
+        value: sync
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: SANCTUM_STATEFUL_DOMAINS
+        value: campuspilot.onrender.com,localhost:3000
+
+  # ── Frontend (Next.js static export) ──────────────────────────────────────
   - type: web
     name: campuspilot
     env: static
+    plan: free
     rootDir: frontend
     buildCommand: npm install && npm run build
     staticPublishPath: out
-    pullRequestPreviewsEnabled: false
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: https://campuspilot-api.onrender.com/api
     headers:
       - path: /*
         name: Cache-Control

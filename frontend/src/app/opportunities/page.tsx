@@ -1,11 +1,13 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import AppLayout from '@/components/layout/AppLayout'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
-import { mockOpportunities } from '@/lib/mock-data'
+import { opportunitiesApi, isAuthenticated } from '@/lib/api'
 import { formatDate, getDaysUntil } from '@/lib/utils'
 import { Briefcase, Search, MapPin, DollarSign, Clock, Bookmark, ExternalLink, Star, Filter } from 'lucide-react'
+import toast from 'react-hot-toast'
 
 const oppTypes = ['All', 'Scholarship', 'Internship', 'Competition', 'Grant', 'Exchange']
 const typeColors: Record<string, string> = {
@@ -20,13 +22,50 @@ const typeBadge: Record<string, string> = {
 }
 
 export default function OpportunitiesPage() {
+  const router = useRouter()
   const [search, setSearch] = useState('')
   const [type, setType] = useState('All')
-  const [saved, setSaved] = useState<Set<string>>(new Set(mockOpportunities.filter(o => o.saved).map(o => o.id)))
+  const [saved, setSaved] = useState<Set<string>>(new Set())
+  const [opportunities, setOpportunities] = useState<Record<string, unknown>[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const filtered = mockOpportunities.filter(o =>
-    (type === 'All' || o.type === type) &&
-    (o.title.toLowerCase().includes(search.toLowerCase()) || o.provider.toLowerCase().includes(search.toLowerCase()))
+  useEffect(() => {
+    if (!isAuthenticated()) { router.push('/login'); return }
+    opportunitiesApi.list({ per_page: 50 })
+      .then(res => {
+        const data = (res.data as { data: { data: Record<string, unknown>[] } }).data.data
+        setOpportunities(data)
+      })
+      .catch(() => toast.error('Failed to load opportunities'))
+      .finally(() => setLoading(false))
+  }, [router])
+
+  const toggleBookmark = async (id: string) => {
+    try {
+      await opportunitiesApi.bookmark(id)
+      setSaved(prev => {
+        const s = new Set(prev)
+        if (s.has(id)) { s.delete(id); toast.success('Bookmark removed') }
+        else { s.add(id); toast.success('Bookmarked!') }
+        return s
+      })
+    } catch {
+      toast.error('Failed to update bookmark')
+    }
+  }
+
+  const filtered = opportunities.filter(o =>
+    (type === 'All' || (o.type as string) === type) &&
+    ((o.title as string).toLowerCase().includes(search.toLowerCase()) ||
+      (o.provider as string).toLowerCase().includes(search.toLowerCase()))
+  )
+
+  if (loading) return (
+    <AppLayout>
+      <div className="flex items-center justify-center h-64">
+        <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    </AppLayout>
   )
 
   return (
@@ -65,24 +104,23 @@ export default function OpportunitiesPage() {
         {/* Opportunities */}
         <div className="grid md:grid-cols-2 gap-5">
           {filtered.map(opp => {
-            const daysLeft = getDaysUntil(opp.deadline)
-            const isSaved = saved.has(opp.id)
+            const id = opp.id as string
+            const oppType = opp.type as string
+            const deadline = opp.deadline as string
+            const daysLeft = getDaysUntil(deadline)
+            const isSaved = saved.has(id)
             return (
-              <div key={opp.id} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden card-hover group">
+              <div key={id} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden card-hover group">
                 {/* Top accent bar */}
-                <div className={`h-1.5 bg-gradient-to-r ${typeColors[opp.type] || 'from-indigo-500 to-purple-600'}`} />
+                <div className={`h-1.5 bg-gradient-to-r ${typeColors[oppType] || 'from-indigo-500 to-purple-600'}`} />
                 <div className="p-5">
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div>
-                      <h3 className="font-bold text-gray-900 dark:text-white text-base leading-tight mb-1">{opp.title}</h3>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">{opp.provider}</p>
+                      <h3 className="font-bold text-gray-900 dark:text-white text-base leading-tight mb-1">{opp.title as string}</h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">{opp.provider as string}</p>
                     </div>
                     <button
-                      onClick={() => {
-                        const s = new Set(saved)
-                        isSaved ? s.delete(opp.id) : s.add(opp.id)
-                        setSaved(s)
-                      }}
+                      onClick={() => toggleBookmark(id)}
                       className={`p-2 rounded-xl transition flex-shrink-0 ${isSaved ? 'bg-amber-100 text-amber-600' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 hover:text-amber-500'}`}
                     >
                       <Bookmark size={16} className={isSaved ? 'fill-amber-500' : ''} />
@@ -90,7 +128,7 @@ export default function OpportunitiesPage() {
                   </div>
 
                   <div className="flex flex-wrap gap-2 mb-3">
-                    <Badge variant={typeBadge[opp.type] as any}>{opp.type}</Badge>
+                    <Badge variant={typeBadge[oppType] as any}>{oppType}</Badge>
                     {daysLeft <= 14 && (
                       <Badge variant="danger" className="flex items-center gap-1">
                         <Clock size={10} /> {daysLeft}d left
@@ -98,17 +136,17 @@ export default function OpportunitiesPage() {
                     )}
                   </div>
 
-                  <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed mb-4 line-clamp-2">{opp.description}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed mb-4 line-clamp-2">{opp.description as string}</p>
 
                   <div className="grid grid-cols-2 gap-3 mb-4 text-xs text-gray-500 dark:text-gray-400">
                     <div className="flex items-center gap-1.5">
-                      <MapPin size={12} className="text-indigo-400" /> {opp.location}
+                      <MapPin size={12} className="text-indigo-400" /> {opp.location as string}
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <DollarSign size={12} className="text-emerald-400" /> {opp.stipend}
+                      <DollarSign size={12} className="text-emerald-400" /> {opp.stipend as string}
                     </div>
                     <div className="flex items-center gap-1.5 col-span-2">
-                      <Clock size={12} className="text-amber-400" /> Deadline: <strong className={daysLeft <= 7 ? 'text-red-500' : 'text-gray-700 dark:text-gray-200'}>{formatDate(opp.deadline)}</strong>
+                      <Clock size={12} className="text-amber-400" /> Deadline: <strong className={daysLeft <= 7 ? 'text-red-500' : 'text-gray-700 dark:text-gray-200'}>{formatDate(deadline)}</strong>
                     </div>
                   </div>
 

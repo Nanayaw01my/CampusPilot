@@ -5,7 +5,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
 const api = axios.create({
   baseURL: API_URL,
   headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-  withCredentials: true,
+  withCredentials: false,
 })
 
 api.interceptors.request.use((config) => {
@@ -98,4 +98,29 @@ export const adminApi = {
   stats: () => api.get('/admin/stats'),
   users: (params?: object) => api.get('/admin/users', { params }),
   analytics: () => api.get('/admin/analytics'),
+}
+
+export function getUser() {
+  if (typeof window === 'undefined') return null
+  try {
+    const u = localStorage.getItem('campus_user')
+    return u ? JSON.parse(u) : null
+  } catch {
+    return null
+  }
+}
+
+export function setAuth(token: string, user: unknown) {
+  localStorage.setItem('campus_token', token)
+  localStorage.setItem('campus_user', JSON.stringify(user))
+}
+
+export function clearAuth() {
+  localStorage.removeItem('campus_token')
+  localStorage.removeItem('campus_user')
+}
+
+export function isAuthenticated() {
+  if (typeof window === 'undefined') return false
+  return !!localStorage.getItem('campus_token')
 }

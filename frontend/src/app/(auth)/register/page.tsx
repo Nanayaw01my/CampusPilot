@@ -1,23 +1,42 @@
 'use client'
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Eye, EyeOff, Mail, Lock, User, Compass, ArrowRight, BookOpen } from 'lucide-react'
 import Button from '@/components/ui/Button'
+import { authApi, setAuth } from '@/lib/api'
 
 const departments = ['Computer Science', 'Engineering', 'Medicine', 'Economics', 'Law', 'Sciences', 'Arts', 'Business']
 const levels = ['100', '200', '300', '400', 'Postgraduate']
 
 export default function RegisterPage() {
+  const router = useRouter()
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
   const [step, setStep] = useState(1)
+  const [error, setError] = useState('')
   const [form, setForm] = useState({ name: '', email: '', password: '', department: '', level: '' })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (step === 1) { setStep(2); return }
     setLoading(true)
-    setTimeout(() => { window.location.href = '/dashboard' }, 1200)
+    setError('')
+    try {
+      const res = await authApi.register(form)
+      setAuth(res.data.token, res.data.user)
+      router.push('/dashboard')
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } }
+      const errors = axiosErr.response?.data?.errors
+      const msg = errors
+        ? Object.values(errors).flat()[0]
+        : axiosErr.response?.data?.message || 'Registration failed. Please try again.'
+      setError(msg as string)
+      if (step === 2) setStep(1)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -27,7 +46,6 @@ export default function RegisterPage() {
 
       <div className="relative w-full max-w-md">
         <div className="bg-white/10 backdrop-blur-2xl border border-white/15 rounded-3xl p-8 shadow-2xl">
-          {/* Logo */}
           <div className="text-center mb-6">
             <Link href="/" className="inline-flex items-center gap-2.5 mb-4">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/40">
@@ -39,7 +57,6 @@ export default function RegisterPage() {
             <p className="text-gray-400 text-sm">Join thousands of students today</p>
           </div>
 
-          {/* Step indicator */}
           <div className="flex items-center gap-3 mb-6">
             {[1, 2].map(s => (
               <div key={s} className="flex items-center gap-2 flex-1">
@@ -53,6 +70,12 @@ export default function RegisterPage() {
               </div>
             ))}
           </div>
+
+          {error && (
+            <div className="mb-4 p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-300 text-sm text-center">
+              {error}
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {step === 1 ? (
@@ -79,7 +102,7 @@ export default function RegisterPage() {
                   <label className="text-sm font-medium text-gray-300 block mb-1.5">Password</label>
                   <div className="relative">
                     <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500" />
-                    <input type={showPass ? 'text' : 'password'} required value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
+                    <input type={showPass ? 'text' : 'password'} required minLength={8} value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
                       placeholder="Min 8 characters"
                       className="w-full pl-10 pr-10 py-3 bg-white/10 border border-white/15 rounded-xl text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm" />
                     <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-500">

@@ -1,11 +1,18 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import AppLayout from '@/components/layout/AppLayout'
 import Button from '@/components/ui/Button'
-import { Settings, Bell, Shield, Palette, Globe, Smartphone, Moon, Sun, ChevronRight, Check } from 'lucide-react'
+import { Settings, Bell, Shield, Palette, Smartphone, Moon, Sun, ChevronRight, Check } from 'lucide-react'
+import { isAuthenticated } from '@/lib/api'
 
 export default function SettingsPage() {
+  const router = useRouter()
   const [theme, setTheme] = useState<'light' | 'dark' | 'auto'>('light')
+
+  useEffect(() => {
+    if (!isAuthenticated()) { router.push('/login'); return }
+  }, [router])
   const [notifSettings, setNotifSettings] = useState({
     emailReminders: true, pushReminders: true, newBooks: true, events: true, opportunities: true, announcements: false,
   })
